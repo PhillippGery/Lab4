@@ -88,13 +88,13 @@
 
   <!-- if using jazzy, uncomment the lines 91-93 -->
 
-   <xacro:ur_robot name="$(arg name)" tf_prefix="$(arg tf_prefix)" parent="table_top" joint_limits_parameters_file="$(arg joint_limit_params)" kinematics_parameters_file="$(arg kinematics_params)" physical_parameters_file="$(arg physical_params)" visual_parameters_file="$(arg visual_params)" safety_limits="$(arg safety_limits)" safety_pos_margin="$(arg safety_pos_margin)" safety_k_position="$(arg safety_k_position)">
+   <!-- <xacro:ur_robot name="$(arg name)" tf_prefix="$(arg tf_prefix)" parent="table_top" joint_limits_parameters_file="$(arg joint_limit_params)" kinematics_parameters_file="$(arg kinematics_params)" physical_parameters_file="$(arg physical_params)" visual_parameters_file="$(arg visual_params)" safety_limits="$(arg safety_limits)" safety_pos_margin="$(arg safety_pos_margin)" safety_k_position="$(arg safety_k_position)">
      <origin xyz="0 ${7.5*inch} ${1*inch}" rpy="0 0 ${-radians(135)}" />  
-  </xacro:ur_robot>
+  </xacro:ur_robot> -->
 
   <!-- if using humble, uncomment the lines 97-136 -->
 
-  <!-- <xacro:ur_robot
+  <xacro:ur_robot
     name="$(arg name)"
     tf_prefix="$(arg tf_prefix)"
     parent="table_top"
@@ -132,5 +132,5 @@
     trajectory_port="$(arg trajectory_port)"
   >
   <origin xyz="0 ${7.5*inch} ${1*inch}" rpy="0 0 ${-radians(135)}" />  
-  </xacro:ur_robot> -->
+  </xacro:ur_robot>
 </robot>
