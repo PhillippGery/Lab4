@@ -26,6 +26,11 @@ function T = ECE569_FKinSpace(M, Slist, thetalist)
 
 T = M;
 for i = size(thetalist): -1: 1
-    % T = ... * T;
+
+    S_hat = ECE569_VecTose3(Slist(:,i));
+    T_i = ECE569_MatrixExp6(S_hat*thetalist(i));
+
+    T = T_i*T;
+
 end
 end

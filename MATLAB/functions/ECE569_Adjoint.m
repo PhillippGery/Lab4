@@ -16,6 +16,15 @@ function AdT = ECE569_Adjoint(T)
 %     0     0     3     1     0     0
 %     3     0     0     0     0    -1
 %     0     0     0     0     1     0
+
 [R, p] = ECE569_TransToRp(T);
-% AdT = ... TODO
+    
+    % Create the p-skew matrix
+
+    p_skew = ECE569_VecToso3(p);
+    
+    % Construct the 6x6 Adjoint
+    AdT = [ R,     zeros(3,3);
+             p_skew * R,  R    ];
+
 end

@@ -4,18 +4,27 @@ close all;
 clc;
 %[text] (1a) Calculate arc length of Lissajous Curve.
 % TODO: replace T, xd, yd with your our lissajous curve
-% T = 2*pi;
-% t = linspace(0,T,1000);
-% xd = 0.16*sin(1*t);
-% yd = 0.08*sin(2*t);
+A = 0.1485;
+B = 0.1136;
+a = 2;
+b = 3;
+ta = 1;
+
+T = 2*pi;
+t = linspace(0,T,1000);
+x = A * sin(a * t);
+y = B * sin(b * t);
 
 d = 0;
 for i=1:length(t)-1
     % d = d + ...
 end
+G_s_func = @(s) sqrt( (A * a * cos(a * s)).^2 + (B * b * cos(b * s)).^2 );
+d = integral(G_s_func, 0, T);
+
 %[text] Determine the average speed, $c$, of end effector over `tfinal` seconds.
 % TODO: replace tfinal with your code
-% tfinal = 5;
+tfinal = 10;
 
 % calculate average speed
 c = d/tfinal;
@@ -23,14 +32,26 @@ c = d/tfinal;
 % normalized trapezoidal curve
 g = @(t, T, ta) (T/(T-ta))*((t < ta) .* (t / ta) + (t >= ta & t <= (T - ta)) .* 1 + (t > (T - ta)) .* ((T - t) / ta));
 
+
+
 dt = 0.002;
 t = 0:dt:tfinal;
 alpha = zeros(size(t));
+
+v_t = c*g(t, tfinal, ta);
+
 for i=1:length(t)-1
-    % xdot = ...
-    % ydot = ...
-    % equation (7) in the lab assignment
-    % alpha(i+1) = alpha(i) + ...
+    xdot = A * a * cos(a * alpha(i));
+    ydot = B * b * cos(b * alpha(i));
+
+    G_alpha = sqrt(xdot^2 + ydot^2);
+    if G_alpha > 1e-9
+        alpha_dot = v_t(i)/G_alpha;
+    else
+        alpha_dot = 0;
+    end
+
+    alpha(i+1) = alpha(i)+ alpha_dot*dt;
 end
 
 plot(t,alpha,'LineWidth',2); title('Plot of \alpha(t)');
@@ -39,11 +60,13 @@ yline(T,'k--','LineWidth',2);
 legend('\alpha','T (period)','Location','southeast')
 %[text] (1c) Combine all trajectories together.
 % TODO: replace with your own lissajous curve
-% x = 0.16*sin(alpha);
-% y = 0.08*sin(2*alpha);
+x = A * sin(a * alpha);
+y = B * sin(b * alpha);
 %[text] Plot the speed of the trajectory as function of time.
+%% 
 v = sqrt( (diff(x)/dt).^2 + (diff(y)/dt).^2 );
-plot(dt:dt:tfinal,v,'LineWidth',3); hold on;
+plot(dt:dt:tfinal,v,'LineWidth',3); 
+hold on;
 yline(c,'k--'); 
 ylim([0 0.3])
 yline(0.25,'r--')
@@ -90,23 +113,29 @@ B = [B1 B2 B3 B4 B5 B6];
 
 % joint angles
 theta0 = [-1.6800   -1.4018   -1.8127   -2.9937   -0.8857   -0.0696]';
+%% 
 
 % calculate the 4x4 matrix representing the transition
 % from end effector frame {b} to the base frame {s} at t=0: Tsb(0)
 
 % TODO: implement ECE569_FKinSpace and ECE569_FKinBody
-T0_space = ECE569_FKinSpace(M,S,theta0)
-T0_body = ECE569_FKinBody(M,B,theta0)
-T0_space-T0_body
+T0_space = ECE569_FKinSpace(M,S,theta0);
+T0_body = ECE569_FKinBody(M,B,theta0);
+T0_space-T0_body;
 T0 = T0_body;
 %[text] Calculate Tsd at every time step.
 % Calculate Tsd(t) for t=0 to t=tfinal
 % Tsd(t) = T0 * Td(t)
 N = length(t);
 Tsd = zeros(4,4,N);
+
 for i=1:N
-    % Tsd(:,:,i) = ...
+    pd = [x(i); y(i); 0];
+    R = eye(3);
+    Td = [R, pd; 0, 0, 0, 1]; 
+    Tsd(:,:,i) = T0*Td;
 end
+
 %%
 %[text] (2d) Plot (x,y,z) in the s frame
 xs = Tsd(1,4,:);
@@ -144,12 +173,14 @@ thetaAll(:,1) = theta0;
 % If the code gets stuck here, you will need to restart MATLAB
 f = waitbar(0,['Inverse Kinematics (1/',num2str(N),') complete.']);
 
+
+
 for i=2:N
     % TODO: use previous solution as current guess
-    % initialguess = ...
+    initialguess = thetaAll(:,i-1);
 
     % TODO: calculate thetaSol for Tsd(:,:,i) with initial guess
-    % [thetaSol, success] = ...
+    [thetaSol, success] = ECE569_IKinBody(B,M,Tsd(:,:,i),initialguess,1e-6,1e-6);
     if (~success)
         close(f);
         error('Error. \nCould not perform IK at index %d.',i)
@@ -170,9 +201,10 @@ ylabel('first order difference')
 %%
 %[text] (3d) Verify that the joints we found actually trace out our trajectory (forward kinematics)
 actualTsd = zeros(4,4,N);
+
 for i=1:N
     % TODO: use forward kinematics to calculate Tsd from our thetaAll
-    % actualTsd(:,:,i) = ... 
+    actualTsd(:,:,i) = ECE569_FKinBody(M, B, thetaAll(:,i));
 end
 
 xs = actualTsd(1,4,:);
@@ -193,7 +225,8 @@ hold off
 %[text] (3e) Verify that the end effector does not enter a kinematic singularity, by plotting the determinant of your body jacobian
 body_dets = zeros(N,1);
 for i=1:N
-    body_dets(i) = det(...);
+    Jb = ECE569_JacobianBody(B, thetaAll(:,i)); 
+    body_dets(i) = det(Jb);
 end
 plot(t, body_dets)
 title('Manipulability')
@@ -209,7 +242,7 @@ led = ones(N,1);
 data = [t' thetaAll' led];
 
 % TODO: change the csv filename to your purdue ID
-% writematrix(data, 'ldihel.csv')
+writematrix(data, 'pgery.csv')
 
 %[appendix]{"version":"1.0"}
 %---

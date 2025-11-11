@@ -15,5 +15,9 @@ function se3mat = ECE569_VecTose3(V)
 %    -2     1     0     6
 %     0     0     0     0 
 
-% se3mat = ... TODO
+se3mat = [  0   -V(3)  V(2)  V(4);
+           V(3)   0   -V(1)  V(5);
+          -V(2)  V(1)   0   V(6);
+            0     0     0     0  ];
+
 end

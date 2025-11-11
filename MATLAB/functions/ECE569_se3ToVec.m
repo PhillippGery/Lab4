@@ -17,5 +17,11 @@ function V = ECE569_se3ToVec(se3mat)
 %     5
 %     6
 
-% V = ... TODO
+V = [se3mat(3, 2);
+     se3mat(1, 3);
+     se3mat(2, 1);
+     se3mat(1, 4);
+     se3mat(2, 4);
+     se3mat(3, 4)];
+
 end

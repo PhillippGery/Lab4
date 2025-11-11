@@ -26,8 +26,15 @@ function Jb = ECE569_JacobianBody(Blist, thetalist)
 
 Jb = Blist;
 T = eye(4);
-for i = length(thetalist) - 1: -1: 1   
-    % T = T * ...
-	% Jb(:, i) = ...
+for i = length(thetalist) - 1: -1: 1  
+
+    se3mat = ECE569_VecTose3(-Blist(:, i+1) * thetalist(i+1));
+    T_i = ECE569_MatrixExp6(se3mat);
+    T = T*T_i;
+
+    AdT = ECE569_Adjoint(T);
+
+
+	Jb(:, i) = AdT * Blist(:,i);
 end
 end
