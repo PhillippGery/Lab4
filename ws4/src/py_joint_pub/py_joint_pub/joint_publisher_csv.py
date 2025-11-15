@@ -14,7 +14,7 @@ class JointPublisherCSV(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.i = 0
         
-        filename = 'pgery.csv' # change this line of code. The provided CSV file (ldihel.csv) is incomplete
+        filename = 'P_Sign.csv' # change this line of code. The provided CSV file (ldihel.csv) is incomplete
         csv_file = pkg_resources.resource_filename('py_joint_pub', f'../resource/{filename}')
         self.get_logger().info(f"Found CSV file {csv_file}")
         self.csv_data = np.genfromtxt(csv_file, delimiter=',', skip_header=1)
