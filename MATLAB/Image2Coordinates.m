@@ -4,7 +4,7 @@ clear; clc; close all;
 % --- Schritt 1: Bild laden und vorbereiten ---
 try
     %I = imread('logo.png'); % Ersetzen Sie dies mit Ihrem Dateinamen
-    I = imread('Pgery_Sign.png');
+    I = imread('logo.png');
 catch
     error('Bilddatei nicht gefunden. Stellen Sie sicher, dass sie im MATLAB-Pfad liegt.');
 end
@@ -85,7 +85,7 @@ smooth_paths = {};
 
 % Diesen Wert müssen Sie eventuell anpassen.
 % Eine größere Fenstergröße = stärkeres Glätten.
-window_size = 5; 
+window_size = 1; 
 
 for k = 1:length(B)
     boundary = B{k};
@@ -203,4 +203,4 @@ hold off;
 disp('Skalierung und Zentrierung abgeschlossen.');
 disp('Die Variable "final_scaled_paths" enthält die Koordinaten in Metern, zentriert um (0,0).');
 
-save('Pgery_Sign_data.mat', 'final_scaled_paths');
+save('PG_data.mat', 'final_scaled_paths');

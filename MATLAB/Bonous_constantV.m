@@ -1,0 +1,358 @@
+%[text] Step 1: Create Trapezoidal Velocity Trajectories
+% clear all; % Auskommentiert, damit 'final_scaled_paths' nicht gelöscht wird
+close all;
+clc;
+
+% --- 1. Pfad-Daten laden ---
+% ANNAHME: Die Variable 'final_scaled_paths' existiert aus deinem Logo-Skript
+if ~exist('final_scaled_paths', 'var')
+    try
+        load('PG_daten.mat'); % Versucht, die Daten aus einer .mat-Datei zu laden
+    catch
+        error('Die Pfad-Variable ''final_scaled_paths'' wurde nicht gefunden. Bitte lade zuerst dein Logo.');
+    end
+end
+
+% --- 2. Parameter definieren ---
+v_max = 0.25;    % Maximale Geschwindigkeit (m/s)
+t_accel = 1.0;  % Beschleunigungs-/Verzögerungszeit (in Sekunden).
+dt = 0.002;   % Zeitschritt (s)
+num_transition_points = 100; % Punkte für An-/Abfahrt (für glatte Interpolation)
+
+% --- 3. Master-Pfad & Distanzen für ALLE Segmente berechnen ---
+p_origin = [0, 0];    % Start- und Endpunkt
+
+G_master_cell = {};       % Cell array, um alle Pfad-Matrizen zu sammeln
+led_distance_markers = [];% Array, um die Länge jedes Segments zu speichern
+current_pos = p_origin;   % Startet am Ursprung
+num_paths = length(final_scaled_paths);
+
+fprintf('Starte Pfad-Zusammenführung für %d Logo-Segmente...\n', num_paths);
+
+for k = 1:num_paths
+    % Holt den nächsten Logo-Pfad
+    path_k = final_scaled_paths{k};
+    p_start = path_k(1, :);
+    p_end = path_k(end, :);
+    
+    % --- Segment A (Transition, LED AUS) ---
+    % Fährt von 'current_pos' zum Start des Pfades 'k'
+    path_A_x = linspace(current_pos(1), p_start(1), num_transition_points)';
+    path_A_y = linspace(current_pos(2), p_start(2), num_transition_points)';
+    path_A = [path_A_x, path_A_y];
+    
+    % Zum Master-Pfad hinzufügen (außer dem 1. Punkt, um Duplikate zu vermeiden)
+    if k == 1
+        G_master_cell{end+1} = path_A; % Fügt den ersten Anfahr-Pfad hinzu
+    else
+        G_master_cell{end+1} = path_A(2:end, :); % Fügt Übergangs-Pfad hinzu
+    end
+    
+    % Länge des Übergangs-Pfades speichern
+    d_A = sqrt((p_start(1)-current_pos(1))^2 + (p_start(2)-current_pos(2))^2);
+    led_distance_markers(end+1) = d_A;
+    
+    % --- Segment B (Logo-Pfad, LED AN) ---
+    % Fügt den eigentlichen Logo-Pfad hinzu
+    G_master_cell{end+1} = path_k(2:end, :); % (vermeidet doppelten Startpunkt)
+    
+    % Länge des Logo-Pfades speichern
+    dx_B = diff(path_k(:,1)); dy_B = diff(path_k(:,2));
+    d_B = sum(sqrt(dx_B.^2 + dy_B.^2));
+    led_distance_markers(end+1) = d_B;
+    
+    % Aktualisiere die 'current_pos' für die nächste Iteration
+    current_pos = p_end;
+    fprintf('Pfad %d (Länge %.3fm) und Übergang (Länge %.3fm) hinzugefügt.\n', k, d_B, d_A);
+end
+
+% --- Segment C (Finale Rückfahrt, LED AUS) ---
+% Fährt vom letzten Punkt (current_pos) zurück zum Ursprung
+p_start = p_origin; % Ziel ist der Ursprung
+path_C_x = linspace(current_pos(1), p_start(1), num_transition_points)';
+path_C_y = linspace(current_pos(2), p_start(2), num_transition_points)';
+path_C = [path_C_x, path_C_y];
+
+G_master_cell{end+1} = path_C(2:end, :);
+d_C = sqrt((p_start(1)-current_pos(1))^2 + (p_start(2)-current_pos(2))^2);
+led_distance_markers(end+1) = d_C;
+fprintf('Rückfahrt zum Ursprung (Länge %.3fm) hinzugefügt.\n', d_C);
+
+% --- 4. Finalen Master-Pfad und Gesamtdistanz erstellen ---
+G_master = vertcat(G_master_cell{:});
+x_master = G_master(:, 1);
+y_master = G_master(:, 2);
+
+d = sum(led_distance_markers); % Gesamtdistanz der gesamten Operation
+fprintf('GESAMTDISTANZ (inkl. aller Übergänge): %.4f m\n', d);
+
+% Kumulativen Distanzvektor für G_master erstellen
+dx_master = diff(x_master); dy_master = diff(y_master);
+s_master = [0; cumsum(sqrt(dx_master.^2 + dy_master.^2))];
+
+% --- 5. Trapez-/Dreieck-Profil für die GESAMTE Distanz 'd' ---
+% (Dieser Block ist identisch zu deinem vorherigen Skript)
+d_ramp_full = v_max * t_accel;
+if d >= d_ramp_full
+    % Fall 1: TRAPEZ
+    d_const = d - d_ramp_full;
+    t_const = d_const / v_max;
+    tfinal = 2 * t_accel + t_const;
+    v_profile_max = v_max;
+    fprintf('Profil: Trapez | v_max: %.2f m/s | t_final: %.2f s\n', v_profile_max, tfinal);
+else
+    % Fall 2: DREIECK
+    t_const = 0;
+    tfinal = 2 * t_accel;
+    v_profile_max = d / t_accel;
+    fprintf('Profil: Dreieck | v_max (reduziert): %.2f m/s | t_final: %.2f s\n', v_profile_max, tfinal);
+end
+
+% --- 6. Geschwindigkeitsprofil v_desired(t) erstellen ---
+% (Dieser Block ist identisch zu deinem vorherigen Skript)
+t = (0:dt:tfinal)'; % Zeitvektor
+N = length(t);
+v_desired = zeros(N, 1);
+for i = 1:N
+    if t(i) <= t_accel
+        v_desired(i) = (v_profile_max / t_accel) * t(i);
+    elseif t(i) > t_accel && t(i) <= t_accel + t_const
+        v_desired(i) = v_profile_max;
+    else
+        t_remaining = tfinal - t(i);
+        v_desired(i) = (v_profile_max / t_accel) * t_remaining;
+    end
+end
+v_desired(v_desired < 0) = 0;
+v_desired(end) = 0;
+
+% --- 7. Pfad neu "timen" durch Interpolation ---
+% (Dieser Block ist identisch zu deinem vorherigen Skript)
+d_desired = cumtrapz(t, v_desired);
+[s_master_unique, ia] = unique(s_master);
+x_master_unique = x_master(ia);
+y_master_unique = y_master(ia);
+
+x = interp1(s_master_unique, x_master_unique, d_desired, 'linear', 'extrap');
+y = interp1(s_master_unique, y_master_unique, d_desired, 'linear', 'extrap');
+x(end) = p_origin(1);
+y(end) = p_origin(2);
+
+% --- 8. LED-Status-Vektor erstellen (NEUE LOGIK) ---
+led_status = zeros(N, 1); % Initialisiere alles auf 0 (OFF)
+
+% Erstelle kumulative Distanz-Marker (z.B. [d_A1, d_A1+d_B1, d_A1+d_B1+d_T1, ...])
+cumulative_dist_markers = cumsum(led_distance_markers);
+
+current_dist_marker = 0;
+for k = 1:length(led_distance_markers)
+    % LED ist AN für Segmente 2, 4, 6, ... (die Logo-Pfade)
+    is_led_on = (mod(k, 2) == 0);
+    
+    if is_led_on
+        % Finde die Zeit-Indizes, die in diesem Distanz-Segment liegen
+        % d_desired > (vorheriger Marker) UND d_desired <= (aktueller Marker)
+        indices = (d_desired > current_dist_marker) & ...
+                  (d_desired <= cumulative_dist_markers(k));
+        led_status(indices) = 1;
+    end
+    
+    % Update des Markers für die nächste Iteration
+    current_dist_marker = cumulative_dist_markers(k);
+end
+led_status(end) = 0; % Sicherstellen, dass LED am Ende aus ist
+%% 
+
+% --- 9. Geschwindigkeitsprofil plotten und verifizieren ---
+v_actual = sqrt( (diff(x)/dt).^2 + (diff(y)/dt).^2 );
+figure;
+plot(t(1:end-1), v_actual, 'k', 'MarkerSize', 4);
+hold on;
+plot(t, v_desired, 'g--', 'LineWidth', 1.5);
+yline(v_profile_max, 'r--', 'LineWidth', 1.5);
+title('Geschwindigkeitsprofil (Gesamte Trajektorie)');
+grid on; xlabel('time (s)'); ylabel('velocity (m/s)');
+legend('Tatsächliche Geschwindigkeit (v)', 'Erwünschte Geschwindigkeit (v\_desired)', 'Max Geschwindigkeit');
+ylim([0 v_max * 1.1]);
+%% 
+
+% --- 10. Trajektorien-Plot (NEU) ---
+% Dieser Plot zeigt, was der Roboter tun wird, und färbt die Pfade
+figure;
+hold on;
+% Teile des Pfades basierend auf LED-Status finden
+path_off = [x(led_status==0), y(led_status==0)];
+path_on  = [x(led_status==1), y(led_status==1)];
+% Plotten (mit '.' für feine Details)
+plot(path_off(:,1), path_off(:,2), 'k.', 'MarkerSize', 2); % An/Abfahrt in Schwarz
+plot(path_on(:,1), path_on(:,2), 'b.', 'MarkerSize', 4);  % Logo in Blau
+axis equal; grid on;
+title('Gefahrene Trajektorie (inkl. An- und Abfahrt)');
+xlabel('X (Meter)'); ylabel('Y (Meter)');
+legend('An/Abfahrt (LED AUS)', 'Logo-Pfad (LED AN)');
+
+%%
+%[text] ## Step 2: Forward Kinematics
+%[text] (2c) Calculate T0
+% these values were obtained from the URDF directly
+L1 = 0.2435;
+L2 = 0.2132;
+W1 = 0.1311;
+W2 = 0.0921;
+H1 = 0.1519;
+H2 = 0.0854;
+
+% home position of end effector
+M = [-1 0 0 L1+L2;
+    0 0 1 W1+W2;
+    0 1 0 H1-H2;
+    0 0 0 1];
+
+% screw axes
+S1 = [0 0 1 0 0 0]';
+S2 = [0 1 0 -H1 0 0]';
+S3 = [0 1 0 -H1 0 L1]';
+S4 = [0 1 0 -H1 0 L1+L2]';
+S5 = [0 0 -1 -W1 L1+L2 0]';
+S6 = [0 1 0 H2-H1 0 L1+L2]';
+S = [S1 S2 S3 S4 S5 S6];
+
+% body screw axes
+B1 = ECE569_Adjoint(M)\S1;
+B2 = ECE569_Adjoint(M)\S2;
+B3 = ECE569_Adjoint(M)\S3;
+B4 = ECE569_Adjoint(M)\S4;
+B5 = ECE569_Adjoint(M)\S5;
+B6 = ECE569_Adjoint(M)\S6;
+B = [B1 B2 B3 B4 B5 B6];
+
+% joint angles
+theta0 = [-1.6800   -1.4018   -1.8127   -2.9937   -0.8857   -0.0696]';
+%% 
+
+% calculate the 4x4 matrix representing the transition
+% from end effector frame {b} to the base frame {s} at t=0: Tsb(0)
+
+% TODO: implement ECE569_FKinSpace and ECE569_FKinBody
+T0_space = ECE569_FKinSpace(M,S,theta0);
+T0_body = ECE569_FKinBody(M,B,theta0);
+T0_space-T0_body;
+T0 = T0_body;
+%[text] Calculate Tsd at every time step.
+% Calculate Tsd(t) for t=0 to t=tfinal
+% Tsd(t) = T0 * Td(t)
+N = length(t);
+Tsd = zeros(4,4,N);
+
+for i=1:N
+    pd = [x(i); y(i); 0];
+    R = eye(3);
+    Td = [R, pd; 0, 0, 0, 1]; 
+    Tsd(:,:,i) = T0*Td;
+end
+
+%%
+%[text] (2d) Plot (x,y,z) in the s frame
+xs = Tsd(1,4,:);
+ys = Tsd(2,4,:);
+zs = Tsd(3,4,:);
+plot3(xs(:), ys(:), zs(:), 'LineWidth', 1)
+title('Trajectory \{s\} frame')
+xlabel('x (m)')
+ylabel('y (m)')
+zlabel('z (m)')
+hold on
+plot3(xs(1),ys(1),zs(1),'go','MarkerSize',10,'LineWidth',2)
+plot3(xs(end),ys(end),zs(end),'rx','MarkerSize',10,'LineWidth',2)
+legend('Trajectory', 'Start', 'End')
+grid on
+hold off
+%%
+%[text] ## Step 3: Inverse Kinematics
+initialguess = theta0;
+Td = T0;
+
+% you need to implement IKinBody
+[thetaSol, success] = ECE569_IKinBody(B,M,Td,theta0,1e-6,1e-6);
+if (~success)
+    close(f);
+    error('Error. \nCould not perform IK at index %d.',1)
+end
+%%
+%[text] (3c) Perform IK at each time step
+thetaAll = zeros(6,N);
+thetaAll(:,1) = theta0;
+
+% you can comment out the waitbar functions if they aren't working
+% (sometimes they don't work with .mlx files)
+% If the code gets stuck here, you will need to restart MATLAB
+f = waitbar(0,['Inverse Kinematics (1/',num2str(N),') complete.']);
+
+
+
+for i=2:N
+    % TODO: use previous solution as current guess
+    initialguess = thetaAll(:,i-1);
+
+    % TODO: calculate thetaSol for Tsd(:,:,i) with initial guess
+    [thetaSol, success] = ECE569_IKinBody(B,M,Tsd(:,:,i),initialguess,1e-6,1e-6);
+    if (~success)
+        close(f);
+        error('Error. \nCould not perform IK at index %d.',i)
+    end
+    thetaAll(:,i) = thetaSol;
+    waitbar(i/N,f,['Inverse Kinematics (',num2str(i),'/',num2str(N),') complete.']);
+end
+close(f);
+%%
+%[text] (3c) Verify that the joint angles don't change very much
+dj = diff(thetaAll');
+plot(t(1:end-1), dj)
+title('First Order Difference in Joint Angles')
+legend('J1','J2','J3','J4','J5','J6','Location','northeastoutside')
+grid on
+xlabel('time (s)')
+ylabel('first order difference')
+%%
+%[text] (3d) Verify that the joints we found actually trace out our trajectory (forward kinematics)
+actualTsd = zeros(4,4,N);
+
+for i=1:N
+    % TODO: use forward kinematics to calculate Tsd from our thetaAll
+    actualTsd(:,:,i) = ECE569_FKinBody(M, B, thetaAll(:,i));
+end
+
+xs = actualTsd(1,4,:);
+ys = actualTsd(2,4,:);
+zs = actualTsd(3,4,:);
+plot3(xs(:), ys(:), zs(:), 'LineWidth', 1)
+title('Verified Trajectory \{s\} frame')
+xlabel('x (m)')
+ylabel('y (m)')
+zlabel('z (m)')
+hold on
+plot3(xs(1),ys(1),zs(1),'go','MarkerSize',10,'LineWidth',2)
+plot3(xs(end),ys(end),zs(end),'rx','MarkerSize',10,'LineWidth',2)
+legend('Trajectory', 'Start', 'End')
+grid on
+hold off
+
+%%
+%[text] (3e) Verify that the end effector does not enter a kinematic singularity, by plotting the determinant of your body jacobian
+body_dets = zeros(N,1);
+for i=1:N
+    Jb = ECE569_JacobianBody(B, thetaAll(:,i)); 
+    body_dets(i) = det(Jb);
+end
+plot(t, body_dets)
+title('Manipulability')
+grid on
+xlabel('time (s)')
+ylabel('det of J_B')
+
+%%
+led = led_status; % <--- NEUE ZEILE
+% save to the CSV file
+data = [t thetaAll' led];
+
+writematrix(data, 'Logo.csv')
