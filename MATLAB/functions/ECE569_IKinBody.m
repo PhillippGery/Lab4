@@ -44,7 +44,7 @@ function [thetalist, success] = ECE569_IKinBody(Blist, M, T, thetalist0, eomg, e
 
 thetalist = thetalist0;
 i = 0;
-maxiterations = 20;
+maxiterations = 30;
 
 % TODO: calculate Vb
 % Hint: you will need to use four of the ECE569 functions from earlier

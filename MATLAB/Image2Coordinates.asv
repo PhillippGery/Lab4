@@ -4,13 +4,11 @@ clear; clc; close all;
 % --- Schritt 1: Bild laden und vorbereiten ---
 try
     %I = imread('logo.png'); % Ersetzen Sie dies mit Ihrem Dateinamen
-    
-    I = imread('Pgery_sign.png');
+    file
+    I = imread('logo.png');
 catch
     error('Bilddatei nicht gefunden. Stellen Sie sicher, dass sie im MATLAB-Pfad liegt.');
 end
-
-target_width = 0.8;
 
 % In Graustufen umwandeln (falls es ein Farbbild ist)
 if size(I, 3) == 3
@@ -143,7 +141,7 @@ G = simple_paths{1};
 
 % --- SCHRITT 7: Skalierung auf Zielbreite & Zentrierung ---
 
- % <-- DEIN ZIEL: z.B. 0.3 Meter (30 cm)
+target_width = 0.3; % <-- DEIN ZIEL: z.B. 0.3 Meter (30 cm)
 final_scaled_paths = {}; % Neues Cell Array für die skalierten Pfade
 
 % 1. Alle Punkte sammeln, um die Gesamt-Bounding-Box (in Pixeln) zu finden

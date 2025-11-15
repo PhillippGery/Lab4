@@ -14,15 +14,13 @@ if ~exist('final_scaled_paths', 'var')
 end
 
 % --- 2. Parameter definieren ---
-v_max = 0.4;    % Maximale Geschwindigkeit (m/s)
+v_max = 0.5;    % Maximale Geschwindigkeit (m/s)
 t_accel = 1.0;  % Beschleunigungs-/Verzögerungszeit (in Sekunden).
 dt = 0.002;   % Zeitschritt (s)
 num_transition_points = 100; % Punkte für An-/Abfahrt (für glatte Interpolation)
 
-offset = [0.1, -0.05, 0.02];
-
 % --- 3. Master-Pfad & Distanzen für ALLE Segmente berechnen ---
-p_origin = [0, 0, 0];    % Start- und Endpunkt
+p_origin = [0, 0];    % Start- und Endpunkt
 
 G_master_cell = {};       % Cell array, um alle Pfad-Matrizen zu sammeln
 led_distance_markers = [];% Array, um die Länge jedes Segments zu speichern
@@ -357,4 +355,4 @@ led = led_status; % <--- NEUE ZEILE
 % save to the CSV file
 data = [t thetaAll' led];
 
-writematrix(data, 'Sign_06.csv')
+writematrix(data, 'Logo_1.csv')

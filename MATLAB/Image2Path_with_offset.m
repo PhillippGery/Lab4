@@ -14,53 +14,67 @@ if ~exist('final_scaled_paths', 'var')
 end
 
 % --- 2. Parameter definieren ---
-v_max = 0.4;    % Maximale Geschwindigkeit (m/s)
+v_max = 0.25;    % Maximale Geschwindigkeit (m/s)
 t_accel = 1.0;  % Beschleunigungs-/Verzögerungszeit (in Sekunden).
 dt = 0.002;   % Zeitschritt (s)
 num_transition_points = 100; % Punkte für An-/Abfahrt (für glatte Interpolation)
 
-offset = [0.1, -0.05, 0.02];
+% NEU: 3D-Offset für die gesamte Zeichnung (X, Y, Z) in Metern
+drawing_offset = [0, -0.2, -0.2]; % z.B. 10cm in X, 0cm in Y, 2cm in Z
+fprintf('Zeichnung wird auf (%.3f, %.3f, %.3f) verschoben.\n', ...
+         drawing_offset(1), drawing_offset(2), drawing_offset(3));
 
 % --- 3. Master-Pfad & Distanzen für ALLE Segmente berechnen ---
-p_origin = [0, 0, 0];    % Start- und Endpunkt
+p_origin = [0, 0, 0];    % Start- und Endpunkt ist 3D-Ursprung
+current_pos = p_origin;   % Startet am Ursprung
 
 G_master_cell = {};       % Cell array, um alle Pfad-Matrizen zu sammeln
 led_distance_markers = [];% Array, um die Länge jedes Segments zu speichern
-current_pos = p_origin;   % Startet am Ursprung
 num_paths = length(final_scaled_paths);
 
-fprintf('Starte Pfad-Zusammenführung für %d Logo-Segmente...\n', num_paths);
+fprintf('Starte 3D-Pfad-Zusammenführung für %d Logo-Segmente...\n', num_paths);
 
 for k = 1:num_paths
-    % Holt den nächsten Logo-Pfad
-    path_k = final_scaled_paths{k};
-    p_start = path_k(1, :);
-    p_end = path_k(end, :);
+    % Holt den nächsten 2D-Logo-Pfad
+    path_k_2D = final_scaled_paths{k};
+    
+    % --- 3D-Verschiebung des Pfades ---
+    x_shifted = path_k_2D(:, 1) + drawing_offset(1);
+    y_shifted = path_k_2D(:, 2) + drawing_offset(2);
+    z_shifted = ones(size(path_k_2D, 1), 1) * drawing_offset(3);
+    
+    % path_k ist jetzt ein 3D-Pfad
+    path_k = [x_shifted, y_shifted, z_shifted];
+    
+    p_start = path_k(1, :);  % 3D-Startpunkt des Logo-Segments k
+    p_end = path_k(end, :);    % 3D-Endpunkt des Logo-Segments k
     
     % --- Segment A (Transition, LED AUS) ---
-    % Fährt von 'current_pos' zum Start des Pfades 'k'
+    % Fährt von 'current_pos' zum 3D-Startpunkt 'p_start'
     path_A_x = linspace(current_pos(1), p_start(1), num_transition_points)';
     path_A_y = linspace(current_pos(2), p_start(2), num_transition_points)';
-    path_A = [path_A_x, path_A_y];
+    path_A_z = linspace(current_pos(3), p_start(3), num_transition_points)'; % 3D
+    path_A = [path_A_x, path_A_y, path_A_z];
     
-    % Zum Master-Pfad hinzufügen (außer dem 1. Punkt, um Duplikate zu vermeiden)
+    % Zum Master-Pfad hinzufügen
     if k == 1
-        G_master_cell{end+1} = path_A; % Fügt den ersten Anfahr-Pfad hinzu
+        G_master_cell{end+1} = path_A; % Erste Anfahrt vom Ursprung
     else
-        G_master_cell{end+1} = path_A(2:end, :); % Fügt Übergangs-Pfad hinzu
+        G_master_cell{end+1} = path_A(2:end, :); % Übergang zwischen Segmenten
     end
     
-    % Länge des Übergangs-Pfades speichern
-    d_A = sqrt((p_start(1)-current_pos(1))^2 + (p_start(2)-current_pos(2))^2);
+    % 3D-Distanz berechnen
+    d_A = norm(p_start - current_pos);
     led_distance_markers(end+1) = d_A;
     
     % --- Segment B (Logo-Pfad, LED AN) ---
-    % Fügt den eigentlichen Logo-Pfad hinzu
     G_master_cell{end+1} = path_k(2:end, :); % (vermeidet doppelten Startpunkt)
     
-    % Länge des Logo-Pfades speichern
-    dx_B = diff(path_k(:,1)); dy_B = diff(path_k(:,2));
-    d_B = sum(sqrt(dx_B.^2 + dy_B.^2));
+    % 3D-Distanz des Logo-Pfades berechnen
+    dx_B = diff(path_k(:,1)); 
+    dy_B = diff(path_k(:,2)); 
+    dz_B = diff(path_k(:,3)); % 3D
+    d_B = sum(sqrt(dx_B.^2 + dy_B.^2 + dz_B.^2));
     led_distance_markers(end+1) = d_B;
     
     % Aktualisiere die 'current_pos' für die nächste Iteration
@@ -69,14 +83,15 @@ for k = 1:num_paths
 end
 
 % --- Segment C (Finale Rückfahrt, LED AUS) ---
-% Fährt vom letzten Punkt (current_pos) zurück zum Ursprung
-p_start = p_origin; % Ziel ist der Ursprung
-path_C_x = linspace(current_pos(1), p_start(1), num_transition_points)';
-path_C_y = linspace(current_pos(2), p_start(2), num_transition_points)';
-path_C = [path_C_x, path_C_y];
+% Fährt vom letzten 3D-Punkt (current_pos) zurück zum 3D-Ursprung
+p_target = p_origin; 
+path_C_x = linspace(current_pos(1), p_target(1), num_transition_points)';
+path_C_y = linspace(current_pos(2), p_target(2), num_transition_points)';
+path_C_z = linspace(current_pos(3), p_target(3), num_transition_points)'; % 3D
+path_C = [path_C_x, path_C_y, path_C_z];
 
 G_master_cell{end+1} = path_C(2:end, :);
-d_C = sqrt((p_start(1)-current_pos(1))^2 + (p_start(2)-current_pos(2))^2);
+d_C = norm(p_target - current_pos); % 3D-Distanz
 led_distance_markers(end+1) = d_C;
 fprintf('Rückfahrt zum Ursprung (Länge %.3fm) hinzugefügt.\n', d_C);
 
@@ -84,35 +99,32 @@ fprintf('Rückfahrt zum Ursprung (Länge %.3fm) hinzugefügt.\n', d_C);
 G_master = vertcat(G_master_cell{:});
 x_master = G_master(:, 1);
 y_master = G_master(:, 2);
+z_master = G_master(:, 3); % 3D
 
 d = sum(led_distance_markers); % Gesamtdistanz der gesamten Operation
-fprintf('GESAMTDISTANZ (inkl. aller Übergänge): %.4f m\n', d);
+fprintf('GESAMTDISTANZ (3D): %.4f m\n', d);
 
-% Kumulativen Distanzvektor für G_master erstellen
-dx_master = diff(x_master); dy_master = diff(y_master);
-s_master = [0; cumsum(sqrt(dx_master.^2 + dy_master.^2))];
+% Kumulativen 3D-Distanzvektor für G_master erstellen
+dx_master = diff(x_master); 
+dy_master = diff(y_master); 
+dz_master = diff(z_master); % 3D
+s_master = [0; cumsum(sqrt(dx_master.^2 + dy_master.^2 + dz_master.^2))];
 
 % --- 5. Trapez-/Dreieck-Profil für die GESAMTE Distanz 'd' ---
-% (Dieser Block ist identisch zu deinem vorherigen Skript)
+% (Dieser Block ist identisch)
 d_ramp_full = v_max * t_accel;
 if d >= d_ramp_full
-    % Fall 1: TRAPEZ
-    d_const = d - d_ramp_full;
-    t_const = d_const / v_max;
-    tfinal = 2 * t_accel + t_const;
-    v_profile_max = v_max;
+    d_const = d - d_ramp_full; t_const = d_const / v_max;
+    tfinal = 2 * t_accel + t_const; v_profile_max = v_max;
     fprintf('Profil: Trapez | v_max: %.2f m/s | t_final: %.2f s\n', v_profile_max, tfinal);
 else
-    % Fall 2: DREIECK
-    t_const = 0;
-    tfinal = 2 * t_accel;
-    v_profile_max = d / t_accel;
+    t_const = 0; tfinal = 2 * t_accel; v_profile_max = d / t_accel;
     fprintf('Profil: Dreieck | v_max (reduziert): %.2f m/s | t_final: %.2f s\n', v_profile_max, tfinal);
 end
 
 % --- 6. Geschwindigkeitsprofil v_desired(t) erstellen ---
-% (Dieser Block ist identisch zu deinem vorherigen Skript)
-t = (0:dt:tfinal)'; % Zeitvektor
+% (Dieser Block ist identisch)
+t = (0:dt:tfinal)'; 
 N = length(t);
 v_desired = zeros(N, 1);
 for i = 1:N
@@ -125,73 +137,70 @@ for i = 1:N
         v_desired(i) = (v_profile_max / t_accel) * t_remaining;
     end
 end
-v_desired(v_desired < 0) = 0;
-v_desired(end) = 0;
+v_desired(v_desired < 0) = 0; v_desired(end) = 0;
 
-% --- 7. Pfad neu "timen" durch Interpolation ---
-% (Dieser Block ist identisch zu deinem vorherigen Skript)
+% --- 7. Pfad neu "timen" durch 3D-Interpolation ---
 d_desired = cumtrapz(t, v_desired);
 [s_master_unique, ia] = unique(s_master);
 x_master_unique = x_master(ia);
 y_master_unique = y_master(ia);
+z_master_unique = z_master(ia); % 3D
 
+% Interpolieren, um die finalen Trajektorien x(t), y(t) und z(t) zu erhalten
 x = interp1(s_master_unique, x_master_unique, d_desired, 'linear', 'extrap');
 y = interp1(s_master_unique, y_master_unique, d_desired, 'linear', 'extrap');
+z = interp1(s_master_unique, z_master_unique, d_desired, 'linear', 'extrap'); % 3D
+
+% Sicherstellen, dass der letzte Punkt exakt der 3D-Ursprung ist
 x(end) = p_origin(1);
 y(end) = p_origin(2);
+z(end) = p_origin(3);
 
-% --- 8. LED-Status-Vektor erstellen (NEUE LOGIK) ---
-led_status = zeros(N, 1); % Initialisiere alles auf 0 (OFF)
-
-% Erstelle kumulative Distanz-Marker (z.B. [d_A1, d_A1+d_B1, d_A1+d_B1+d_T1, ...])
+% --- 8. LED-Status-Vektor erstellen ---
+% (Dieser Block ist identisch)
+led_status = zeros(N, 1);
 cumulative_dist_markers = cumsum(led_distance_markers);
-
 current_dist_marker = 0;
 for k = 1:length(led_distance_markers)
-    % LED ist AN für Segmente 2, 4, 6, ... (die Logo-Pfade)
-    is_led_on = (mod(k, 2) == 0);
-    
+    is_led_on = (mod(k, 2) == 0); % Segmente 2, 4, 6... sind Logo-Pfade
     if is_led_on
-        % Finde die Zeit-Indizes, die in diesem Distanz-Segment liegen
-        % d_desired > (vorheriger Marker) UND d_desired <= (aktueller Marker)
         indices = (d_desired > current_dist_marker) & ...
                   (d_desired <= cumulative_dist_markers(k));
         led_status(indices) = 1;
     end
-    
-    % Update des Markers für die nächste Iteration
     current_dist_marker = cumulative_dist_markers(k);
 end
-led_status(end) = 0; % Sicherstellen, dass LED am Ende aus ist
-%% 
+led_status(end) = 0;
 
-% --- 9. Geschwindigkeitsprofil plotten und verifizieren ---
-v_actual = sqrt( (diff(x)/dt).^2 + (diff(y)/dt).^2 );
+% --- 9. 3D-Geschwindigkeitsprofil plotten ---
+v_actual = sqrt( (diff(x)/dt).^2 + (diff(y)/dt).^2 + (diff(z)/dt).^2 ); % 3D
 figure;
 plot(t(1:end-1), v_actual, 'k', 'MarkerSize', 4);
 hold on;
 plot(t, v_desired, 'g--', 'LineWidth', 1.5);
 yline(v_profile_max, 'r--', 'LineWidth', 1.5);
-title('Geschwindigkeitsprofil (Gesamte Trajektorie)');
+title('3D-Geschwindigkeitsprofil (Gesamte Trajektorie)');
 grid on; xlabel('time (s)'); ylabel('velocity (m/s)');
-legend('Tatsächliche Geschwindigkeit (v)', 'Erwünschte Geschwindigkeit (v\_desired)', 'Max Geschwindigkeit');
+legend('Tatsächliche Geschwindigkeit (v)', 'Erwünschte (v\_desired)', 'Max Geschw.');
 ylim([0 v_max * 1.1]);
-%% 
 
-% --- 10. Trajektorien-Plot (NEU) ---
-% Dieser Plot zeigt, was der Roboter tun wird, und färbt die Pfade
+% --- 10. 3D-Trajektorien-Plot ---
 figure;
 hold on;
 % Teile des Pfades basierend auf LED-Status finden
-path_off = [x(led_status==0), y(led_status==0)];
-path_on  = [x(led_status==1), y(led_status==1)];
-% Plotten (mit '.' für feine Details)
-plot(path_off(:,1), path_off(:,2), 'k.', 'MarkerSize', 2); % An/Abfahrt in Schwarz
-plot(path_on(:,1), path_on(:,2), 'b.', 'MarkerSize', 4);  % Logo in Blau
+path_off = [x(led_status==0), y(led_status==0), z(led_status==0)];
+path_on  = [x(led_status==1), y(led_status==1), z(led_status==1)];
+% Plotten
+plot3(path_off(:,1), path_off(:,2), path_off(:,3), 'k.', 'MarkerSize', 2); % An/Abfahrt
+plot3(path_on(:,1), path_on(:,2), path_on(:,3), 'b.', 'MarkerSize', 4);  % Logo
+% Start- und Endpunkt hervorheben
+plot3(p_origin(1), p_origin(2), p_origin(3), 'go', 'MarkerSize', 10, 'LineWidth', 2);
 axis equal; grid on;
-title('Gefahrene Trajektorie (inkl. An- und Abfahrt)');
-xlabel('X (Meter)'); ylabel('Y (Meter)');
-legend('An/Abfahrt (LED AUS)', 'Logo-Pfad (LED AN)');
+title('Gefahrene 3D-Trajektorie (inkl. An- und Abfahrt)');
+xlabel('X (Meter)'); ylabel('Y (Meter)'); zlabel('Z (Meter)');
+legend('An/Abfahrt (LED AUS)', 'Logo-Pfad (LED AN)', 'Start/Ende (0,0,0)');
+view(30, 20); % Guter 3D-Blickwinkel
+
 
 %%
 %[text] ## Step 2: Forward Kinematics
