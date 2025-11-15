@@ -1,5 +1,5 @@
 %[text] Step 1: Create Trapezoidal Velocity Trajectories
-clear all;
+%clear all;
 close all;
 clc;
 %[text] (1a) Calculate arc length of Lissajous Curve.
@@ -15,16 +15,18 @@ t = linspace(0,T,1000);
 x = A * sin(a * t);
 y = B * sin(b * t);
 
+
+
 d = 0;
-for i=1:length(t)-1
-    % d = d + ...
-end
+% for i=1:length(t)-1
+%     d = d + sqrt((x(i+1) - x(i))^2 + (y(i+1) - y(i))^2);
+% end
 G_s_func = @(s) sqrt( (A * a * cos(a * s)).^2 + (B * b * cos(b * s)).^2 );
 d = integral(G_s_func, 0, T);
 
 %[text] Determine the average speed, $c$, of end effector over `tfinal` seconds.
 % TODO: replace tfinal with your code
-tfinal = 10;
+tfinal = 15;
 
 % calculate average speed
 c = d/tfinal;
