@@ -1,0 +1,206 @@
+% --- MATLAB-Skript: Logo zu XY-Koordinaten ---
+clear; clc; close all;
+
+% --- Schritt 1: Bild laden und vorbereiten ---
+try
+    %I = imread('logo.png'); % Ersetzen Sie dies mit Ihrem Dateinamen
+    I = imread('Pgery_Sign.png');
+catch
+    error('Bilddatei nicht gefunden. Stellen Sie sicher, dass sie im MATLAB-Pfad liegt.');
+end
+
+% In Graustufen umwandeln (falls es ein Farbbild ist)
+if size(I, 3) == 3
+    I_gray = im2gray(I);
+else
+    I_gray = I;
+end
+
+% In ein Binärbild (schwarz/weiß) umwandeln
+% 'imbinarize' passt den Schwellenwert automatisch an
+bw = imbinarize(I_gray);
+
+% Zur Kontrolle anzeigen
+figure;
+imshow(bw);
+title('Binärbild (Original)');
+%% 
+
+
+% --- Schritt 2: Bild invertieren (WICHTIG) ---
+% Meistens ist das Logo schwarz (Wert 0) und der Hintergrund weiß (Wert 1).
+% Die Funktion 'bwboundaries' sucht aber nach WEISSEN Objekten (Wert 1).
+% Daher müssen wir das Bild wahrscheinlich invertieren.
+if sum(bw(:)) > numel(bw)/2  % Wenn mehr als die Hälfte weiß ist -> invertieren
+    bw_inverted = ~bw;
+else
+    bw_inverted = bw; % Anscheinend war das Logo schon weiß
+end
+
+% Invertiertes Bild zur Kontrolle anzeigen
+figure;
+imshow(bw_inverted);
+title('Invertiert (Logo ist jetzt weiß)');
+%% 
+
+
+
+% --- Schritt 3: Konturen finden (Die Vektorisierung) ---
+% 'bwboundaries' findet die Umrisse aller weißen Objekte.
+
+[B, L] = bwboundaries(bw_inverted);
+
+% --- Schritt 4: Pixel-Konturen plotten ---
+figure;
+hold on;
+title('Pixelierte Vektor-Konturen (Original)');
+axis equal; % Wichtig für das Seitenverhältnis
+
+for k = 1:length(B)
+    boundary = B{k}; % Holt die Koordinaten für ein Objekt
+    
+    % Plotten: Spalte 2 ist X, Spalte 1 ist Y
+    plot(boundary(:, 2), boundary(:, 1), 'b', 'LineWidth', 1);
+end
+
+% Y-Achse umkehren, da Bild-Koordinaten (0,0) oben links haben
+set(gca, 'YDir', 'reverse');
+hold off;
+
+%% 
+
+% --- Schritt 5: Pfad glätten (WICHTIG für den Roboter) ---
+% Die Konturen sind sehr 'pixelig' und haben Tausende von Punkten.
+% Ein Roboter kann das nicht (oder nur sehr ruckelig) abfahren.
+% Wir verwenden 'smoothdata' zur Glättung.
+
+figure;
+hold on;
+title('Geglättete Roboter-Pfade');
+axis equal;
+set(gca, 'YDir', 'reverse');
+
+% Wir speichern die geglätteten Pfade in einem neuen Cell Array
+smooth_paths = {};
+
+% Diesen Wert müssen Sie eventuell anpassen.
+% Eine größere Fenstergröße = stärkeres Glätten.
+window_size = 5; 
+
+for k = 1:length(B)
+    boundary = B{k};
+    
+    % Original-Punkte
+    x_pixelig = boundary(:, 2);
+    y_pixelig = boundary(:, 1);
+    
+    % Glätten mit einem Gauß-Filter
+    x_smooth = smoothdata(x_pixelig, 'gaussian', window_size);
+    y_smooth = smoothdata(y_pixelig, 'gaussian', window_size);
+    
+    % Den geglätteten Pfad plotten
+    plot(x_smooth, y_smooth, 'r-', 'LineWidth', 2);
+    
+    % Für die spätere Verwendung speichern
+    smooth_paths{k} = [x_smooth, y_smooth];
+end
+hold off;
+%% 
+
+
+figure;
+hold on;
+title('Vereinfachte & Geglättete Pfade');
+axis equal;
+set(gca, 'YDir', 'reverse');
+
+simple_paths = {};
+toleranz = 0.0001; % Höhere Toleranz = weniger Punkte = weniger genau
+
+for k = 1:length(smooth_paths)
+    path_data = smooth_paths{k}; % 'path_data' ist bereits eine N-by-2 Matrix
+    
+    % 'reducepoly' mit einer Input-Matrix und einer Output-Matrix aufrufen
+    simple_matrix = reducepoly(path_data, toleranz);
+    
+    % Jetzt die Matrix in x und y aufteilen
+    x_simple = simple_matrix(:, 1);
+    y_simple = simple_matrix(:, 2);
+    
+    % Plotten (mit Punkten, um die Reduktion zu sehen)
+    plot(x_simple, y_simple, 'g-o', 'LineWidth', 1.5, 'MarkerSize', 3);
+    
+    simple_paths{k} = [x_simple, y_simple];
+end
+hold off;
+
+G = simple_paths{1};
+%% 
+
+
+% --- SCHRITT 7: Skalierung auf Zielbreite & Zentrierung ---
+
+target_width = 0.3; % <-- DEIN ZIEL: z.B. 0.3 Meter (30 cm)
+final_scaled_paths = {}; % Neues Cell Array für die skalierten Pfade
+
+% 1. Alle Punkte sammeln, um die Gesamt-Bounding-Box (in Pixeln) zu finden
+all_points = vertcat(simple_paths{:});
+
+% 2. Finde die aktuellen Min/Max-Grenzen
+min_x = min(all_points(:, 1));
+max_x = max(all_points(:, 1));
+min_y = min(all_points(:, 2));
+max_y = max(all_points(:, 2));
+
+% 3. Finde das Pixel-Zentrum des Logos
+center_x_pixel = (min_x + max_x) / 2;
+center_y_pixel = (min_y + max_y) / 2;
+
+% 4. Aktuelle Breite und Skalierungsfaktor berechnen
+current_width_pixels = max_x - min_x;
+scale_factor = target_width / current_width_pixels;
+
+% 5. Alle Pfade skalieren und um den Ursprung (0,0) zentrieren
+figure;
+hold on;
+title(['Finaler Skalierter & Zentrierter Pfad (Breite: ', num2str(target_width), ' m)']);
+
+for k = 1:length(simple_paths)
+    % Nimm den originalen (vereinfachten) Pfad
+    current_path_pixels = simple_paths{k};
+    
+    x_orig = current_path_pixels(:, 1);
+    y_orig = current_path_pixels(:, 2);
+    
+    % 1. Verschiebe, sodass das Pixel-Zentrum bei (0,0) liegt
+    x_shifted = x_orig - center_x_pixel;
+    y_shifted = center_y_pixel - y_orig;
+    
+    % 2. Skaliere auf die Zielgröße in Metern
+    x_scaled_meters = x_shifted * scale_factor;
+    y_scaled_meters = y_shifted * scale_factor;
+    
+    % Plotten des finalen Pfades
+    plot(x_scaled_meters, y_scaled_meters, 'b-', 'LineWidth', 2);
+    
+    % Speichern des skalierten Pfades für die Trajektorien-Planung
+    final_scaled_paths{k} = [x_scaled_meters, y_scaled_meters];
+end
+
+G = final_scaled_paths{1};
+
+% Plot-Formatierung
+axis equal;
+grid on;
+xlabel('X (Meter)');
+ylabel('Y (Meter)');
+% Füge Achsen-Linien hinzu, um das Zentrum (0,0) zu zeigen
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
+hold off;
+
+disp('Skalierung und Zentrierung abgeschlossen.');
+disp('Die Variable "final_scaled_paths" enthält die Koordinaten in Metern, zentriert um (0,0).');
+
+save('Pgery_Sign_data.mat', 'final_scaled_paths');
